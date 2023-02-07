@@ -12,8 +12,8 @@ import pandas as pd
 
 df = bt.feed.CSVData(
 	files=[
-		"/Users/pol.maksim/Downloads/OHLC Data/binance/futures/BTCUSDT/1m/2021.csv",
-		"/Users/pol.maksim/Downloads/OHLC Data/binance/futures/BTCUSDT/1m/2022.csv"
+		"/Users/pol.maksim/Downloads/OHLC Data/binance/futures/BTCUSDT/1m-old/2021.csv",
+		"/Users/pol.maksim/Downloads/OHLC Data/binance/futures/BTCUSDT/1m-old/2022.csv"
 	],
 	timestamp=0,
 	datetime=1,
