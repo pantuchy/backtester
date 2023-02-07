@@ -102,7 +102,7 @@ class Report(object):
 		pf["realized_drawdown"] = ((real_wealth_index - draws["prev_peaks"]) / draws["prev_peaks"]) * 100
 		pf = pd.concat([pf, bench[["benchmark"]]], ignore_index=False, axis=1)
 		daily_return = pf.pct_change(periods=1).realized
-		self.__sharpe_ratio = (len(pf)**0.5) * (daily_return.mean() / daily_return.std())
+		self.__sharpe_ratio = (len(pf)**0.5) * (daily_return.mean() / daily_return.std()) if daily_return.mean() > 0 and daily_return.mean() > 0 else 0
 		self.__portfolio_history = pf.reset_index()
 		self.__daily_return = daily_return.mean()
 		self.__weekly_return = pf.pct_change(periods=7).realized.mean()
@@ -159,10 +159,11 @@ class Report(object):
 		self.__annual_returns = ar
 
 		#Trades Qty
-		self.__tqty_data = self.__trades[["datetime", "side"]].copy().groupby(pd.Grouper(key="datetime", freq="D"), dropna=False).count()
-		self.__tqty_data["weekly_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=7).sum()
-		self.__tqty_data["monthly_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=30).sum()
-		self.__tqty_data["annual_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=365).sum()
+		if len(self.__trades.index) > 0:
+			self.__tqty_data = self.__trades[["datetime", "side"]].copy().groupby(pd.Grouper(key="datetime", freq="D"), dropna=False).count()
+			self.__tqty_data["weekly_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=7).sum()
+			self.__tqty_data["monthly_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=30).sum()
+			self.__tqty_data["annual_trades_qty"] = self.__tqty_data["side"].rolling(min_periods=0, window=365).sum()
 
 		#Trades Interval
 		tid = self.__trades[["datetime", "realized_pnl"]].copy()
@@ -210,32 +211,18 @@ class Report(object):
 		else:
 			output_notebook()
 
+		layout_columns = []
 		tools = "xpan, xwheel_zoom, reset, save"
 		cross = CrosshairTool()
 		cross.line_color = "black"
 		cross.line_alpha = 0.5
-		source = ColumnDataSource(data=self.__portfolio_history)
-
-		ph = figure(
-			width=1000,
-			height=480,
-			tools=tools,
-			title=f"Portfolio History",
-			x_axis_label="Date",
-			y_axis_label=f"Portfolio Value",
-			x_axis_type="datetime",
-			active_drag="xpan",
-			active_scroll="xwheel_zoom",
-			toolbar_location="right",
-			sizing_mode="scale_width"
-		)
 
 		hover = HoverTool(
 			tooltips=[
 				("Date", "@datetime{%Y-%m-%d}"),
 				("Unrealized", "@unrealized{%0.2f}"),
 				("Realized", "@realized{%0.2f}"),
-     			("Benchmark", "@benchmark{%0.2f}"),
+				("Benchmark", "@benchmark{%0.2f}"),
 				("Drawdown", "@realized_drawdown{%0.2f}%")
 			],
 			formatters={
@@ -250,42 +237,60 @@ class Report(object):
 			line_policy="none"
 		)
 
-		ph.add_tools(hover)
-		ph.add_tools(cross)
+		if len(self.__portfolio_history.index > 0):
+			source = ColumnDataSource(data=self.__portfolio_history)
 
-		ph.line("datetime", "unrealized", source=source, legend_label="Unrealized", line_width=2, line_color="silver"),
-		ph.line("datetime", "realized", source=source, legend_label="Realized", line_width=2, line_color="forestgreen"),
-		ph.line("datetime", "benchmark", source=source, legend_label="Benchmark", line_width=2, line_color="red")
+			ph = figure(
+				width=1000,
+				height=480,
+				tools=tools,
+				title=f"Portfolio History",
+				x_axis_label="Date",
+				y_axis_label=f"Portfolio Value",
+				x_axis_type="datetime",
+				active_drag="xpan",
+				active_scroll="xwheel_zoom",
+				toolbar_location="right",
+				sizing_mode="scale_width"
+			)
 
-		ph.legend.location = "top_left"
-		ph.legend.click_policy = "hide"
-		ph.y_range.only_visible = True
-		ph.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
-		ph.yaxis[0].formatter = NumeralTickFormatter(format="0.00")
+			ph.add_tools(hover)
+			ph.add_tools(cross)
 
-		dr = figure(
-			width=1000,
-			height=200,
-			tools=tools,
-			title="Drawdown History (%)",
-			x_axis_label="Date",
-			y_axis_label="Drawdown",
-			x_axis_type="datetime",
-			active_drag="xpan",
-			active_scroll="xwheel_zoom",
-			toolbar_location="right",
-			x_range=ph.x_range,
-			sizing_mode="scale_width"
-		)
+			ph.line("datetime", "unrealized", source=source, legend_label="Unrealized", line_width=2, line_color="silver"),
+			ph.line("datetime", "realized", source=source, legend_label="Realized", line_width=2, line_color="forestgreen"),
+			ph.line("datetime", "benchmark", source=source, legend_label="Benchmark", line_width=2, line_color="red")
 
-		dr.add_tools(hover)
-		dr.add_tools(cross)
-		dr.varea(x="datetime", y1=0, y2="realized_drawdown", source=source, level="underlay", fill_alpha=0.2, fill_color="tomato")
-		dr.line("datetime", "realized_drawdown", source=source, legend_label="Percent", line_width=2, line_color="tomato")
-		dr.legend.visible = False
-		dr.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
-		dr.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
-		space = Spacer(width=25, sizing_mode="stretch_height")
+			ph.legend.location = "top_left"
+			ph.legend.click_policy = "hide"
+			ph.y_range.only_visible = True
+			ph.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
+			ph.yaxis[0].formatter = NumeralTickFormatter(format="0.00")
+			layout_columns.append(ph)
+
+			dr = figure(
+				width=1000,
+				height=200,
+				tools=tools,
+				title="Drawdown History (%)",
+				x_axis_label="Date",
+				y_axis_label="Drawdown",
+				x_axis_type="datetime",
+				active_drag="xpan",
+				active_scroll="xwheel_zoom",
+				toolbar_location="right",
+				x_range=ph.x_range,
+				sizing_mode="scale_width"
+			)
+
+			dr.add_tools(hover)
+			dr.add_tools(cross)
+			dr.varea(x="datetime", y1=0, y2="realized_drawdown", source=source, level="underlay", fill_alpha=0.2, fill_color="tomato")
+			dr.line("datetime", "realized_drawdown", source=source, legend_label="Percent", line_width=2, line_color="tomato")
+			dr.legend.visible = False
+			dr.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
+			dr.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
+			layout_columns.append(dr)
 
 		stats_template = """
 			<style type="text/css" scoped>
@@ -458,17 +463,17 @@ class Report(object):
 				loss_ratio=self.__loss_ratio,
 				long_ratio=self.__long_ratio,
 				short_ratio=self.__short_ratio,
-				trades_qty=len(self.__trades.index) / 2,
-				daily_trades_qty=self.__tqty_data["side"].mean() / 2,
-				weekly_trades_qty=self.__tqty_data["weekly_trades_qty"].mean() / 2,
-				monthly_trades_qty=self.__tqty_data["monthly_trades_qty"].mean() / 2,
-				annual_trades_qty=self.__tqty_data["annual_trades_qty"].mean() / 2,
+				trades_qty=len(self.__trades.index) / 2 if len(self.__trades.index) > 0 else 0,
+				daily_trades_qty=self.__tqty_data["side"].mean() / 2 if len(self.__trades.index) > 0 else 0,
+				weekly_trades_qty=self.__tqty_data["weekly_trades_qty"].mean() / 2 if len(self.__trades.index) > 0 else 0,
+				monthly_trades_qty=self.__tqty_data["monthly_trades_qty"].mean() / 2 if len(self.__trades.index) > 0 else 0,
+				annual_trades_qty=self.__tqty_data["annual_trades_qty"].mean() / 2 if len(self.__trades.index) > 0 else 0,
 				avg_trades_interval=str(self.__tintval_data["datetime_delta"].mean()).split(".")[0],
 				max_trades_interval=str(self.__tintval_data["datetime_delta"].max()).split(".")[0],
 				avg_trade_duration=str(self.__tdur_data["datetime_delta"].mean()).split(".")[0],
 				max_trade_duration=str(self.__tdur_data["datetime_delta"].max()).split(".")[0],
 				fees=abs(self.__total_fees),
-				turnover=self.__trades["notional"].sum(),
+				turnover=self.__trades["notional"].sum() if len(self.__trades.index) > 0 else 0,
 				backtest_duration=self.__duration
 			),
 			width=400,
@@ -477,117 +482,123 @@ class Report(object):
 		)
 
 		# Monthly Returns
-		columns = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-		index = self.__monthly_returns.year.drop_duplicates(keep="last").sort_values().values
+		if len(self.__monthly_returns.index) > 0:
+			month_columns = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+			index = self.__monthly_returns.year.drop_duplicates(keep="last").sort_values().values
 
-		mr = pd.DataFrame(
-			columns=columns,
-			index=index
-		)
+			mr = pd.DataFrame(
+				columns=month_columns,
+				index=index
+			)
 
-		for r in self.__monthly_returns.itertuples():
-			mr.loc[r.year, r.month] = r.pct_diff
+			for r in self.__monthly_returns.itertuples():
+				mr.loc[r.year, r.month] = r.pct_diff
 
-		mr.index.name = "year"
-		mr.columns.name = "month"
-		mr_data = mr.stack().rename("value").reset_index()
-		mr_data["year"] = mr_data["year"].apply(str)
-		high = mr_data.value.max()
-		low = mr_data.value.min()
+			mr.index.name = "year"
+			mr.columns.name = "month"
+			mr_data = mr.stack().rename("value").reset_index()
+			mr_data["year"] = mr_data["year"].apply(str)
+			high = mr_data.value.max()
+			low = mr_data.value.min()
 
-		if high > low:
-			if high > 100:
-				low = -100
-			else:
-				low = high * -1
+			if high > low:
+				if high > 100:
+					low = -100
+				else:
+					low = high * -1
 
-		mapper = LinearColorMapper(
-			palette=RdYlGn[11][::-1],
-			high=high,
-			low=low,
-			nan_color="grey"
-		)
+			mapper = LinearColorMapper(
+				palette=RdYlGn[11][::-1],
+				high=high,
+				low=low,
+				nan_color="grey"
+			)
 
-		mrp = figure(
-			title="Monthly Returns (%)",
-			width=1000,
-			height=150,
-			tools="save",
-			toolbar_location=None,
-			x_range=columns,
-			y_range=list(mr_data.year.drop_duplicates().sort_values(ascending=False)),
-			sizing_mode="scale_width"
-		)
+			mrp = figure(
+				title="Monthly Returns (%)",
+				width=1000,
+				height=150,
+				tools="save",
+				toolbar_location=None,
+				x_range=month_columns,
+				y_range=list(mr_data.year.drop_duplicates().sort_values(ascending=False)),
+				sizing_mode="scale_width"
+			)
 
-		hover = HoverTool(
-			tooltips=[
-				("Period", "@month @year"),
-				("Return", "@value{%0.2f}%")
-			],
-			formatters={
-				"@year": "printf",
-				"@month": "printf",
-				"@value": "printf"
-			}
-		)
+			hover = HoverTool(
+				tooltips=[
+					("Period", "@month @year"),
+					("Return", "@value{%0.2f}%")
+				],
+				formatters={
+					"@year": "printf",
+					"@month": "printf",
+					"@value": "printf"
+				}
+			)
 
-		mrp.add_tools(hover)
+			mrp.add_tools(hover)
 
-		mrp.rect(
-			x="month",
-			y="year",
-			width=1,
-			height=1,
-			source=ColumnDataSource(mr_data),
-			line_color="gainsboro",
-			fill_color=transform("value", mapper)
-		)
+			mrp.rect(
+				x="month",
+				y="year",
+				width=1,
+				height=1,
+				source=ColumnDataSource(mr_data),
+				line_color="gainsboro",
+				fill_color=transform("value", mapper)
+			)
 
-		color_bar = ColorBar(color_mapper=mapper, location=(0, 0), ticker=BasicTicker(desired_num_ticks=len(RdYlGn[11])))
-		mrp.add_layout(color_bar, "right")
+			color_bar = ColorBar(color_mapper=mapper, location=(0, 0), ticker=BasicTicker(desired_num_ticks=len(RdYlGn[11])))
+			mrp.add_layout(color_bar, "right")
+			layout_columns.append(mrp)
 
 		# Annual Returns
-		years = [str(y) for y in self.__annual_returns.year.drop_duplicates(keep="last").values]
-		source = ColumnDataSource(data=dict(year=years, value=self.__annual_returns.pct_diff.values))
+		if len(self.__annual_returns.index) > 0:
+			years = [str(y) for y in self.__annual_returns.year.drop_duplicates(keep="last").values]
+			source = ColumnDataSource(data=dict(year=years, value=self.__annual_returns.pct_diff.values))
 
-		arp = figure(
-			x_range=years,
-			width=1000,
-			height=150,
-			toolbar_location=None,
-			title="Annual Returns (%)",
-			sizing_mode="scale_width"
-		)
+			arp = figure(
+				x_range=years,
+				width=1000,
+				height=150,
+				toolbar_location=None,
+				title="Annual Returns (%)",
+				sizing_mode="scale_width"
+			)
 
-		hover = HoverTool(
-			tooltips=[
-				("Year", "@year"),
-				("Return", "@value{%0.2f}%")
-			],
-			formatters={
-				"@year": "printf",
-				"@value": "printf"
-			}
-		)
+			hover = HoverTool(
+				tooltips=[
+					("Year", "@year"),
+					("Return", "@value{%0.2f}%")
+				],
+				formatters={
+					"@year": "printf",
+					"@value": "printf"
+				}
+			)
 
-		arp.add_tools(hover)
+			arp.add_tools(hover)
 
-		arp.vbar(
-			x="year",
-			top="value",
-			width=0.4,
-			source=source,
-			line_color="white",
-			fill_color="steelblue"
-		)
+			arp.vbar(
+				x="year",
+				top="value",
+				width=0.4,
+				source=source,
+				line_color="white",
+				fill_color="steelblue"
+			)
 
-		arp.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
-		arp.xgrid.grid_line_color = None
-		arp.y_range.start = self.__annual_returns.pct_diff.min() * 1.1 if self.__annual_returns.pct_diff.min() < 0 else 0
-		arp.y_range.end = self.__annual_returns.pct_diff.max() * 1.1 if self.__annual_returns.pct_diff.max() > 0 else 0
+			arp.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
+			arp.xgrid.grid_line_color = None
+			arp.y_range.start = self.__annual_returns.pct_diff.min() * 1.1 if self.__annual_returns.pct_diff.min() < 0 else 0
+			arp.y_range.end = self.__annual_returns.pct_diff.max() * 1.1 if self.__annual_returns.pct_diff.max() > 0 else 0
+			layout_columns.append(arp)
 
-		col1 = column([ph, dr, mrp, arp], sizing_mode="scale_width")
+		# col1 = column([ph, dr, mrp, arp], sizing_mode="scale_width")
+		col1 = column(layout_columns, sizing_mode="scale_width")
 		col2 = column([stats], sizing_mode="stretch_height")
+		space = Spacer(width=25, sizing_mode="stretch_height")
 		row1 = row([col1, space, col2], sizing_mode="scale_width")
 		layout = column([row1], sizing_mode="scale_width")
 		show(layout)
