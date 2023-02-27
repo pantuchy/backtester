@@ -6,7 +6,7 @@ import math
 from bokeh import events
 from bokeh.plotting import figure, show, ColumnDataSource, output_file
 from bokeh.io import output_notebook
-from bokeh.models import PrintfTickFormatter, NumeralTickFormatter, DatetimeTickFormatter, HoverTool
+from bokeh.models import PrintfTickFormatter, NumeralTickFormatter, DatetimeTickFormatter, HoverTool, Span
 from bokeh.models import CustomJS, CrosshairTool, Div, Spacer, BasicTicker, ColorBar, LinearColorMapper
 from bokeh.palettes import RdYlGn
 from bokeh.transform import transform
@@ -215,60 +215,63 @@ class Report(object):
 			output_notebook()
 
 		tools = "xpan, xwheel_zoom, reset, save"
-		cross = CrosshairTool()
+
+		width = Span(dimension="width", line_dash="dotted", line_width=1)
+		height = Span(dimension="height", line_dash="dotted", line_width=1)
+
+		cross = CrosshairTool(overlay=[width, height])
 		cross.line_color = "black"
 		cross.line_alpha = 0.5
+
+		source = ColumnDataSource(data=self.__portfolio_history)
+
+		p1 = figure(
+			width=1000,
+			height=480,
+			tools=tools,
+			title="Portfolio History",
+			x_axis_label="Date",
+			y_axis_label="Portfolio Value",
+			x_axis_type="datetime",
+			active_drag="xpan",
+			active_scroll="xwheel_zoom",
+			toolbar_location="right",
+			sizing_mode="stretch_width"
+		)
+
+		p1.line(source=source, x="datetime", y="unrealized", legend_label="Unrealized", line_width=2, line_color="silver"),
+		p1.line(source=source, x="datetime", y="realized", legend_label="Realized", line_width=2, line_color="forestgreen"),
+		p1.line(source=source, x="datetime", y="benchmark", legend_label="Benchmark", line_width=2, line_color="orange", visible=False)
+
+		p1.legend.location = "top_left"
+		p1.legend.click_policy = "hide"
+		p1.y_range.only_visible = True
+		p1.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
+		p1.yaxis[0].formatter = NumeralTickFormatter(format="0.00")
 
 		hover = HoverTool(
 			tooltips=[
 				("Date", "@datetime{%Y-%m-%d}"),
 				("Unrealized", "@unrealized{%0.2f}"),
 				("Realized", "@realized{%0.2f}"),
-				("Benchmark", "@benchmark{%0.2f}"),
-				("Drawdown", "@realized_drawdown{%0.2f}%")
+				("Benchmark", "@benchmark{%0.2f}")
 			],
 			formatters={
 				"@datetime": "datetime",
 				"@unrealized": "printf",
 				"@realized": "printf",
-				"@benchmark": "printf",
-				"@realized_drawdown": "printf"
+				"@benchmark": "printf"
 			},
 			mode="vline",
 			show_arrow=False,
-			line_policy="none"
+			line_policy="none",
+			point_policy="follow_mouse"
 		)
 
-		source = ColumnDataSource(data=self.__portfolio_history)
+		p1.add_tools(hover)
+		p1.add_tools(cross)
 
-		ph = figure(
-			width=1000,
-			height=480,
-			tools=tools,
-			title=f"Portfolio History",
-			x_axis_label="Date",
-			y_axis_label=f"Portfolio Value",
-			x_axis_type="datetime",
-			active_drag="xpan",
-			active_scroll="xwheel_zoom",
-			toolbar_location="right",
-			sizing_mode="scale_width"
-		)
-
-		ph.add_tools(hover)
-		ph.add_tools(cross)
-
-		ph.line("datetime", "unrealized", source=source, legend_label="Unrealized", line_width=2, line_color="silver"),
-		ph.line("datetime", "realized", source=source, legend_label="Realized", line_width=2, line_color="forestgreen"),
-		ph.line("datetime", "benchmark", source=source, legend_label="Benchmark", line_width=2, line_color="orange", visible=False)
-
-		ph.legend.location = "top_left"
-		ph.legend.click_policy = "hide"
-		ph.y_range.only_visible = True
-		ph.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
-		ph.yaxis[0].formatter = NumeralTickFormatter(format="0.00")
-
-		dr = figure(
+		p2 = figure(
 			width=1000,
 			height=200,
 			tools=tools,
@@ -279,17 +282,34 @@ class Report(object):
 			active_drag="xpan",
 			active_scroll="xwheel_zoom",
 			toolbar_location="right",
-			x_range=ph.x_range,
-			sizing_mode="scale_width"
+			x_range=p1.x_range,
+			sizing_mode="stretch_width"
 		)
 
-		dr.add_tools(hover)
-		dr.add_tools(cross)
-		dr.varea(x="datetime", y1=0, y2="realized_drawdown", source=source, level="underlay", fill_alpha=0.2, fill_color="tomato")
-		dr.line("datetime", "realized_drawdown", source=source, legend_label="Percent", line_width=2, line_color="tomato")
-		dr.legend.visible = False
-		dr.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
-		dr.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
+		p2.varea(x="datetime", y1=0, y2="realized_drawdown", source=source, level="underlay", fill_alpha=0.2, fill_color="tomato")
+		p2.line(x="datetime", y="realized_drawdown", source=source, legend_label="Percent", line_width=2, line_color="tomato")
+
+		p2.legend.visible = False
+		p2.xaxis[0].formatter = DatetimeTickFormatter(years="%Y", months="%Y-%m", days="%Y-%m-%d", hours="%Y-%m-%d %H:%M", minutes="%Y-%m-%d %H:%M")
+		p2.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
+
+		hover = HoverTool(
+			tooltips=[
+				("Date", "@datetime{%Y-%m-%d}"),
+				("Drawdown", "@realized_drawdown{%0.2f}%")
+			],
+			formatters={
+				"@datetime": "datetime",
+				"@realized_drawdown": "printf"
+			},
+			mode="vline",
+			show_arrow=False,
+			line_policy="none",
+			point_policy="follow_mouse"
+		)
+
+		p2.add_tools(hover)
+		p2.add_tools(cross)
 
 		stats_template = """
 			<style type="text/css" scoped>
@@ -512,7 +532,7 @@ class Report(object):
 			nan_color="grey"
 		)
 
-		mrp = figure(
+		p3 = figure(
 			title="Monthly Returns (%)",
 			width=1000,
 			height=150,
@@ -520,7 +540,7 @@ class Report(object):
 			toolbar_location=None,
 			x_range=month_columns,
 			y_range=list(mr_data.year.drop_duplicates().sort_values(ascending=False)),
-			sizing_mode="scale_width"
+			sizing_mode="stretch_width"
 		)
 
 		hover = HoverTool(
@@ -535,9 +555,9 @@ class Report(object):
 			}
 		)
 
-		mrp.add_tools(hover)
+		p3.add_tools(hover)
 
-		mrp.rect(
+		p3.rect(
 			x="month",
 			y="year",
 			width=1,
@@ -548,19 +568,19 @@ class Report(object):
 		)
 
 		color_bar = ColorBar(color_mapper=mapper, location=(0, 0), ticker=BasicTicker(desired_num_ticks=len(RdYlGn[11])))
-		mrp.add_layout(color_bar, "right")
+		p3.add_layout(color_bar, "right")
 
 		# Annual Returns
 		years = [str(y) for y in self.__annual_returns.year.drop_duplicates(keep="last").values]
 		source = ColumnDataSource(data=dict(year=years, value=self.__annual_returns.pct_diff.values))
 
-		arp = figure(
+		p4 = figure(
 			x_range=years,
 			width=1000,
 			height=150,
 			toolbar_location=None,
 			title="Annual Returns (%)",
-			sizing_mode="scale_width"
+			sizing_mode="stretch_width"
 		)
 
 		hover = HoverTool(
@@ -574,9 +594,9 @@ class Report(object):
 			}
 		)
 
-		arp.add_tools(hover)
+		p4.add_tools(hover)
 
-		arp.vbar(
+		p4.vbar(
 			x="year",
 			top="value",
 			width=0.4,
@@ -585,16 +605,16 @@ class Report(object):
 			fill_color="steelblue"
 		)
 
-		arp.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
-		arp.xgrid.grid_line_color = None
-		arp.y_range.start = self.__annual_returns.pct_diff.min() * 1.1 if self.__annual_returns.pct_diff.min() < 0 else 0
-		arp.y_range.end = self.__annual_returns.pct_diff.max() * 1.1 if self.__annual_returns.pct_diff.max() > 0 else 0
+		p4.yaxis[0].formatter = PrintfTickFormatter(format="%0.2f %%")
+		p4.xgrid.grid_line_color = None
+		p4.y_range.start = self.__annual_returns.pct_diff.min() * 1.1 if self.__annual_returns.pct_diff.min() < 0 else 0
+		p4.y_range.end = self.__annual_returns.pct_diff.max() * 1.1 if self.__annual_returns.pct_diff.max() > 0 else 0
 
-		col1 = column([ph, dr, mrp, arp], sizing_mode="scale_width")
+		col1 = column([p1, p2, p3, p4], sizing_mode="stretch_width")
 		col2 = column([stats], sizing_mode="stretch_height")
 		space = Spacer(width=25, sizing_mode="stretch_height")
-		row1 = row([col1, space, col2], sizing_mode="scale_width")
-		layout = column([row1], sizing_mode="scale_width")
+		row1 = row([col1, space, col2], sizing_mode="stretch_width")
+		layout = column([row1], sizing_mode="stretch_width")
 		show(layout)
 
 	@property

@@ -1,3 +1,4 @@
 cryptogate.code-workspace
 dist
 build
+.ipynb_checkpoints/
