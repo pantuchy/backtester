@@ -13,7 +13,7 @@ class Strategy(Backtester):
 	def __init__(self):
 		super().__init__()
 		self.__last_row_index = 0
-		self.__last = None
+		self.__data = None
 
 		self.__positions = {
 			POSITION_SIDE_LONG: None,
@@ -22,45 +22,45 @@ class Strategy(Backtester):
 
 	@final
 	def __skip_next(self) -> bool:
-		if self.__last is None:
+		if self.__data is None:
 			return True
-		elif math.isnan(self.__last.open) or math.isnan(self.__last.high) or math.isnan(self.__last.low) or math.isnan(self.__last.close):
+		elif math.isnan(self.__data.open) or math.isnan(self.__data.high) or math.isnan(self.__data.low) or math.isnan(self.__data.close):
 			return True
 
 		return False
 
 	@final
 	def __before_next(self):
-		if self.__last.datetime.hour in self.cfg.funding_rate_hours and self.__last.datetime.minute == 0:
+		if self.__data.datetime.hour in self.cfg.funding_rate_hours and self.__data.datetime.minute == 0:
 			if self.__positions[POSITION_SIDE_LONG] is not None and self.cfg.leverage > 1:
 				fee = self.__positions[POSITION_SIDE_LONG].notional * self.cfg.funding_rate
 				self.broker._sub_cash(fee)
-				self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_FUNDING_FEE, fee * -1])
+				self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_FUNDING_FEE, fee * -1])
 
 			if self.__positions[POSITION_SIDE_SHORT] is not None:
 				fee = self.__positions[POSITION_SIDE_SHORT].notional * self.cfg.funding_rate
 				self.broker._sub_cash(fee)
-				self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_FUNDING_FEE, fee * -1])
+				self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_FUNDING_FEE, fee * -1])
 
 	@final
 	def __after_next(self):
-		if self.__last.datetime.hour == 0 and self.__last.datetime.minute == 0:
+		if self.__data.datetime.hour == 0 and self.__data.datetime.minute == 0:
 			amount = self.broker.cash
 
 			if self.__positions[POSITION_SIDE_LONG] is not None:
-				amount += self.__positions[POSITION_SIDE_LONG].margin + self.__positions[POSITION_SIDE_LONG].get_unrealized_pnl(self.__last.close)
+				amount += self.__positions[POSITION_SIDE_LONG].margin + self.__positions[POSITION_SIDE_LONG].get_unrealized_pnl(self.__data.close)
 
 			if self.__positions[POSITION_SIDE_SHORT] is not None:
-				amount += self.__positions[POSITION_SIDE_SHORT].margin + self.__positions[POSITION_SIDE_SHORT].get_unrealized_pnl(self.__last.close)
+				amount += self.__positions[POSITION_SIDE_SHORT].margin + self.__positions[POSITION_SIDE_SHORT].get_unrealized_pnl(self.__data.close)
 
-			self.store._add_portfolio_history([self.__last.datetime, amount])
-
-	@property
-	def last(self) -> tuple:
-		return self.__last
+			self.store._add_portfolio_history([self.__data.datetime, amount])
 
 	@property
-	def data(self) -> pd.DataFrame:
+	def data(self) -> tuple:
+		return self.__data
+
+	@property
+	def history_data(self) -> pd.DataFrame:
 		return self.store.data.loc[0:self.__last_row_index]
 
 	@property
@@ -84,7 +84,7 @@ class Strategy(Backtester):
 		if math.isnan(quantity) or quantity <= 0:
 			raise Exception("Quantity must be greater zero")
 
-		entry_price = price if price > 0 else self.__last.close
+		entry_price = price if price > 0 else self.__data.close
 		notional = entry_price * quantity
 		fee = notional * self.cfg.fee_rate
 
@@ -106,14 +106,14 @@ class Strategy(Backtester):
 				side=POSITION_SIDE_LONG,
 				price=entry_price,
 				size=quantity,
-				created_at=self.__last.datetime,
+				created_at=self.__data.datetime,
 				leverage=self.cfg.leverage
 			)
 
 			self.broker._sub_cash(margin + fee)
 
-		self.store._add_trade([self.__last.datetime, ORDER_SIDE_BUY, quantity, entry_price, notional, fee, math.nan])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
+		self.store._add_trade([self.__data.datetime, ORDER_SIDE_BUY, quantity, entry_price, notional, fee, math.nan])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 	@final
 	def close_long(self, quantity: float = 0, price: float = 0):
@@ -123,7 +123,7 @@ class Strategy(Backtester):
 		if quantity < 0:
 			raise Exception("Quantity must be greater zero")
 
-		exit_price = price if price > 0 else self.__last.close
+		exit_price = price if price > 0 else self.__data.close
 		qty = self.__positions[POSITION_SIDE_LONG].size if quantity == 0 or quantity >= self.__positions[POSITION_SIDE_LONG].size else quantity
 		pnl = (exit_price - self.__positions[POSITION_SIDE_LONG].price) * qty
 		notional = exit_price * qty
@@ -131,9 +131,9 @@ class Strategy(Backtester):
 		margin = (self.__positions[POSITION_SIDE_LONG].price * qty) * (1 / self.__positions[POSITION_SIDE_LONG].leverage)
 		self.broker._add_cash(margin + pnl - fee)
 		self.__positions[POSITION_SIDE_LONG]._decrease(qty)
-		self.store._add_trade([self.__last.datetime, ORDER_SIDE_SELL, qty, exit_price, notional, fee, pnl])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_REALIZED_PNL, pnl])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
+		self.store._add_trade([self.__data.datetime, ORDER_SIDE_SELL, qty, exit_price, notional, fee, pnl])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_REALIZED_PNL, pnl])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 		if self.__positions[POSITION_SIDE_LONG].size <= 0:
 			self.__positions[POSITION_SIDE_LONG] = None
@@ -143,7 +143,7 @@ class Strategy(Backtester):
 		if math.isnan(quantity) or quantity <= 0:
 			raise Exception("Quantity must be greater zero")
 
-		entry_price = price if price > 0 else self.__last.close
+		entry_price = price if price > 0 else self.__data.close
 		notional = entry_price * quantity
 		fee = notional * self.cfg.fee_rate
 
@@ -165,14 +165,14 @@ class Strategy(Backtester):
 				side=POSITION_SIDE_SHORT,
 				price=entry_price,
 				size=quantity,
-				created_at=self.__last.datetime,
+				created_at=self.__data.datetime,
 				leverage=self.cfg.leverage
 			)
 
 			self.broker._sub_cash(margin + fee)
 
-		self.store._add_trade([self.__last.datetime, ORDER_SIDE_SELL, quantity, entry_price, notional, fee, math.nan])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
+		self.store._add_trade([self.__data.datetime, ORDER_SIDE_SELL, quantity, entry_price, notional, fee, math.nan])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 	@final
 	def close_short(self, quantity: float = 0, price: float = 0):
@@ -182,7 +182,7 @@ class Strategy(Backtester):
 		if quantity < 0:
 			raise Exception("Quantity must be greater zero")
 
-		exit_price = price if price > 0 else self.__last.close
+		exit_price = price if price > 0 else self.__data.close
 		qty = self.__positions[POSITION_SIDE_SHORT].size if quantity == 0 or quantity >= self.__positions[POSITION_SIDE_SHORT].size else quantity
 		pnl = (self.__positions[POSITION_SIDE_SHORT].price - exit_price) * qty
 		notional = exit_price * qty
@@ -190,9 +190,9 @@ class Strategy(Backtester):
 		margin = (self.__positions[POSITION_SIDE_SHORT].price * qty) * (1 / self.__positions[POSITION_SIDE_SHORT].leverage)
 		self.broker._add_cash(margin + pnl - fee)
 		self.__positions[POSITION_SIDE_SHORT]._decrease(qty)
-		self.store._add_trade([self.__last.datetime, ORDER_SIDE_BUY, qty, exit_price, notional, fee, pnl])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_REALIZED_PNL, pnl])
-		self.store._add_transaction([self.__last.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
+		self.store._add_trade([self.__data.datetime, ORDER_SIDE_BUY, qty, exit_price, notional, fee, pnl])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_REALIZED_PNL, pnl])
+		self.store._add_transaction([self.__data.datetime, TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 		if self.__positions[POSITION_SIDE_SHORT].size <= 0:
 			self.__positions[POSITION_SIDE_SHORT] = None
@@ -212,7 +212,7 @@ class Strategy(Backtester):
 
 		for row in self.store.data.itertuples():
 			self.__last_row_index = row.Index
-			self.__last = row
+			self.__data = row
 
 			if self.__skip_next():
 				continue
