@@ -6,16 +6,18 @@ import pandas as pd
 class CSVData:
 	"""
 	Args:
+		timestamp (int): Column index. Set '-1' if not exist
+		datetime (int): Column index. Set '-1' if not exist
 		tsformat (str): D, s, ms, us, ns
 	"""
 	files: list
 	timestamp: int
-	datetime: str
-	open: float
-	high: float
-	low: float
-	close: float
-	volume: float
+	datetime: int
+	open: int
+	high: int
+	low: int
+	close: int
+	volume: int
 	dtformat: str = "%Y-%m-%d %H:%M:%S"
 	tsformat: str = "s"
 	separator: str = ","
