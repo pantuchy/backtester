@@ -47,4 +47,4 @@ class Backtester:
 		self.__cfg.price_precision = precision
 
 	def set_data(self, data: pd.DataFrame):
-		self.__store.data = data.reset_index().rename(columns={"index": "datetime"})
+		self.__store.data = data.reset_index()

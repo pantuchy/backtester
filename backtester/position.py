@@ -4,12 +4,13 @@ from .reference import *
 from . import utils
 
 class Position:
-	def __init__(self, side: str, price: float, size: float, created_at: pd.Timestamp, leverage: int):
+	def __init__(self, side: str, price: float, size: float, created_at: pd.Timestamp, leverage: int, close_price_column: str = "close"):
 		self.__side = side
 		self.__price = price
 		self.__size = size
 		self.__created_at = created_at
 		self.__leverage = leverage
+		self.__close_price_column = close_price_column
 
 	def _increase(self, price: float, size: float):
 		self.__price = (self.notional + (price * size)) / (self.__size + size)
@@ -49,6 +50,10 @@ class Position:
 	@property
 	def liquidation_price(self) -> float:
 		return utils.get_liquidation_price(self.__side, self.__price, self.__leverage)
+
+	@property
+	def close_price_column(self) -> str:
+		return self.__close_price_column
 
 	def get_breakeven_price(self, fee_rate: float) -> float:
 		return utils.get_breakeven_price(self.__side, self.__price, self.__size, fee_rate)
