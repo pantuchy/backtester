@@ -3,4 +3,3 @@ from .reference import *
 from .backtester import *
 from .strategy import *
 from .utils import *
-from . import feed as feed

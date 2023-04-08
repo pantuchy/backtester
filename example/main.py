@@ -50,15 +50,15 @@ class BuyAndHold24Hours(bt.Strategy):
 		self.max_balance_risk = 0.1
 
 	def next(self):
-		if self.data.datetime.hour == 0:
+		if self.data["datetime"].hour == 0:
 			notional = self.broker.cash * self.max_balance_risk
 
 			if notional >= self.min_trade_notional:
-				qty = notional / self.data.close
-				self.open_long(price=self.data.close, quantity=qty)
-		elif self.data.datetime.hour == 23:
+				qty = notional / self.data["close"]
+				self.open_long(quantity=qty)
+		elif self.data["datetime"].hour == 23:
 			if self.has_long:
-				self.close_long(price=self.data.close)
+				self.close_long()
 
 strategy = BuyAndHold24Hours()
 strategy.set_fee_rate(0.04)

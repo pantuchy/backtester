@@ -206,7 +206,7 @@ class Strategy(Backtester):
 		if self.broker.cash == 0:
 			raise Exception("Insufficient funds")
 
-		if not "datetime" in self.store.data.columns or is_datetime64_ns_dtype(self.store.data["datetime"]):
+		if not "datetime" in self.store.data.columns or not is_datetime64_ns_dtype(self.store.data["datetime"]):
 			raise Exception("Data feed must have column 'datetime' as Pandas Timestamp")
 
 		start = dt.datetime.now(timezone.utc)
