@@ -38,6 +38,7 @@ class Report(object):
 		self.__broker = broker
 		self.__config = cfg
 		self.__store = store
+		self.__bench_return = np.nan
 
 		self.__transactions = pd.DataFrame(
 			self.__store.transactions,
@@ -73,22 +74,6 @@ class Report(object):
 			draws = draws[draws["duration"] > pd.Timedelta(days=0)]
 			self.__drawdowns = draws.rename(columns={"min": "from_date", "max": "to_date"}).reset_index()
 
-			#Benchmark Returns
-			bench = self.__store.data.set_index("datetime").resample("D").agg({
-				"open": "first",
-				"high": "max",
-				"low": "min",
-				"close": "last",
-				"volume": "sum"
-			})
-
-			bench["avg_price"] = bench[["open", "high", "low", "close"]].sum(axis=1) / 4
-			bench["avg_price"].replace(0, np.nan, inplace=True)
-			bench["daily_return"] = bench["avg_price"] / bench["avg_price"].shift(1)
-			bench["balance"] = self.__broker.start_cash * bench["daily_return"].cumprod()
-			self.__bench_return = bench.iloc[-1].balance - self.__broker.start_cash
-			bench = bench.round({"balance": self.__config.quote_precision}).rename(columns={"balance": "benchmark"})
-
 			#Portfolio History
 			pf = pd.DataFrame(
 				self.__store.portfolio_history,
@@ -101,7 +86,24 @@ class Report(object):
 			draws = pd.DataFrame()
 			draws["prev_peaks"] = real_wealth_index.cummax()
 			pf["realized_drawdown"] = ((real_wealth_index - draws["prev_peaks"]) / draws["prev_peaks"]) * 100
-			pf = pd.concat([pf, bench[["benchmark"]]], ignore_index=False, axis=1)
+
+			#Benchmark Returns
+			if all(x in self.__store.data.columns for x in ["open", "high", "low", "close"]):
+				bench = self.__store.data.set_index("datetime").resample("D").agg({
+					"open": "first",
+					"high": "max",
+					"low": "min",
+					"close": "last"
+				})
+
+				bench["avg_price"] = bench[["open", "high", "low", "close"]].sum(axis=1) / 4
+				bench["avg_price"].replace(0, np.nan, inplace=True)
+				bench["daily_return"] = bench["avg_price"] / bench["avg_price"].shift(1)
+				bench["balance"] = self.__broker.start_cash * bench["daily_return"].cumprod()
+				self.__bench_return = bench.iloc[-1].balance - self.__broker.start_cash
+				bench = bench.round({"balance": self.__config.quote_precision}).rename(columns={"balance": "benchmark"})
+				pf = pd.concat([pf, bench[["benchmark"]]], ignore_index=False, axis=1)
+
 			daily_return = pf.pct_change(periods=1).realized
 			self.__sharpe_ratio = (len(pf)**0.5) * (daily_return.mean() / daily_return.std())
 			self.__portfolio_history = pf.reset_index()
@@ -241,7 +243,16 @@ class Report(object):
 
 		p1.line(source=source, x="datetime", y="unrealized", legend_label="Unrealized", line_width=2, line_color="silver"),
 		p1.line(source=source, x="datetime", y="realized", legend_label="Realized", line_width=2, line_color="forestgreen"),
-		p1.line(source=source, x="datetime", y="benchmark", legend_label="Benchmark", line_width=2, line_color="orange", visible=False)
+
+		p1_tooltips = [
+			("Date", "@datetime{%Y-%m-%d}"),
+			("Unrealized", "@unrealized{%0.2f}"),
+			("Realized", "@realized{%0.2f}")
+		]
+
+		if "benchmark" in self.__portfolio_history.columns:
+			p1.line(source=source, x="datetime", y="benchmark", legend_label="Benchmark", line_width=2, line_color="orange", visible=False)
+			p1_tooltips.append(("Benchmark", "@benchmark{%0.2f}"))
 
 		p1.legend.location = "top_left"
 		p1.legend.click_policy = "hide"
@@ -250,12 +261,7 @@ class Report(object):
 		p1.yaxis[0].formatter = NumeralTickFormatter(format="0.00")
 
 		hover = HoverTool(
-			tooltips=[
-				("Date", "@datetime{%Y-%m-%d}"),
-				("Unrealized", "@unrealized{%0.2f}"),
-				("Realized", "@realized{%0.2f}"),
-				("Benchmark", "@benchmark{%0.2f}")
-			],
+			tooltips=p1_tooltips,
 			formatters={
 				"@datetime": "datetime",
 				"@unrealized": "printf",
