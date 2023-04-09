@@ -113,14 +113,14 @@ class Strategy(Backtester):
 		self.store._add_transaction([self.__data["datetime"], TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 	@final
-	def close_long(self, quantity: float = 0, price: float = 0, close_price_column: str = "close"):
+	def close_long(self, quantity: float = 0, price: float = 0):
 		if self.__positions[POSITION_SIDE_LONG] is None:
 			raise Exception(f"No opened {POSITION_SIDE_LONG} positions")
 
 		if quantity < 0:
 			raise Exception("Quantity must be greater zero")
 
-		exit_price = price if price > 0 else self.__data[close_price_column]
+		exit_price = price if price > 0 else self.__data[self.__positions[POSITION_SIDE_LONG].close_price_column]
 		qty = self.__positions[POSITION_SIDE_LONG].size if quantity == 0 or quantity >= self.__positions[POSITION_SIDE_LONG].size else quantity
 		pnl = (exit_price - self.__positions[POSITION_SIDE_LONG].price) * qty
 		notional = exit_price * qty
@@ -173,14 +173,14 @@ class Strategy(Backtester):
 		self.store._add_transaction([self.__data["datetime"], TRANSACTION_TYPE_COMMISSION, fee * -1])
 
 	@final
-	def close_short(self, quantity: float = 0, price: float = 0, close_price_column: str = "close"):
+	def close_short(self, quantity: float = 0, price: float = 0):
 		if self.__positions[POSITION_SIDE_SHORT] is None:
 			raise Exception(f"No opened {POSITION_SIDE_SHORT} positions")
 
 		if quantity < 0:
 			raise Exception("Quantity must be greater zero")
 
-		exit_price = price if price > 0 else self.__data[close_price_column]
+		exit_price = price if price > 0 else self.__data[self.__positions[POSITION_SIDE_SHORT].close_price_column]
 		qty = self.__positions[POSITION_SIDE_SHORT].size if quantity == 0 or quantity >= self.__positions[POSITION_SIDE_SHORT].size else quantity
 		pnl = (self.__positions[POSITION_SIDE_SHORT].price - exit_price) * qty
 		notional = exit_price * qty
