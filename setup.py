@@ -21,5 +21,5 @@ setup(
 	keywords="backtesting",
 	packages=find_packages(),
 	python_requires=">=3.8",
-	install_requires=["numpy", "pandas", "bokeh"]
+	install_requires=["numpy", "pandas"]
 )
