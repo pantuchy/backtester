@@ -209,8 +209,6 @@ class Strategy(Backtester):
 		if not "datetime" in self.store.data.columns or not is_datetime64_ns_dtype(self.store.data["datetime"]):
 			raise Exception("Data feed must have column 'datetime' as Pandas Timestamp")
 
-		start = dt.datetime.now(timezone.utc)
-
 		for row in self.store.data.values:
 			self.__data = dict(zip(self.store.data.columns, row))
 
@@ -221,12 +219,8 @@ class Strategy(Backtester):
 			self.next()
 			self.__after_next()
 
-		end = dt.datetime.now(timezone.utc)
-		duration = end - start
-
 		return Report(
 			strategy=self.__class__.__name__,
-			duration=duration,
 			broker=self.broker,
 			cfg=self.cfg,
 			store=self.store,

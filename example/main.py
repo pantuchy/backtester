@@ -10,6 +10,7 @@ sys.dont_write_bytecode = True
 from os.path import exists
 import backtester as bt
 import pandas as pd
+import quantstats as qs
 
 def get_number(num: int) -> str:
 	return f"0{num}" if num < 10 else f"{num}"
@@ -70,4 +71,8 @@ strategy.set_cash(10000)
 strategy.set_data(df)
 
 report = strategy.run()
-report.plot()
+
+returns = report.returns.copy()
+returns = report.returns.set_index("datetime")
+returns.index = returns.index.tz_localize(None)
+qs.plots.returns(returns["percent"])
